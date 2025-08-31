@@ -1,0 +1,42 @@
+{
+    "name": "API Nodes",
+    "library_schema_version": "0.1.0",
+    "metadata": {
+        "author": "<Your-Name>",
+        "description": "API Nodes library",
+        "library_version": "0.1.0",
+        "engine_version": "0.41.0",
+        "tags": [
+            "Griptape",
+            "AI",
+            "API"
+        ],
+        "dependencies": {
+            "pip_dependencies": [
+                "requests"
+            ]
+        }
+    },
+    "categories": [
+        {
+            "API Nodes": {
+                "color": "border-blue-500",
+                "title": "API Nodes",
+                "description": "External API integrations",
+                "icon": "Globe2"
+            }
+        }
+    ],
+    "nodes": [
+        {
+            "class_name": "SeedanceVideoGeneration",
+            "file_path": "seedance_video_generation.py",
+            "metadata": {
+                "category": "API Nodes",
+                "description": "Generate video via Seedance using Griptape Cloud forwarder",
+                "display_name": "Seedance Video Generation",
+                "icon": "Video"
+            }
+        }
+    ]
+}

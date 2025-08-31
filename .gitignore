@@ -1,3 +1,7 @@
 .env
 .venv
 example_nodes_template/__pycache__/
+node-development-guide-v2.md
+tests/.env.local
+/tests/venv
+/api_nodes/__pycache__
