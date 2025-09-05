@@ -2,7 +2,7 @@
     "name": "API Nodes",
     "library_schema_version": "0.1.0",
     "metadata": {
-        "author": "<Your-Name>",
+        "author": "Kyle Roche",
         "description": "API Nodes library",
         "library_version": "0.1.0",
         "engine_version": "0.41.0",

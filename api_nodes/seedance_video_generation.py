@@ -105,6 +105,30 @@ class SeedanceVideoGeneration(DataNode):
                 )
             )
 
+            # Duration (seconds)
+            self.add_parameter(
+                Parameter(
+                    name="duration",
+                    input_types=["int", "str"],
+                    type="int",
+                    default_value=5,
+                    tooltip="Video duration in seconds",
+                    allowed_modes={ParameterMode.INPUT, ParameterMode.PROPERTY},
+                )
+            )
+
+            # Camera fixed flag
+            self.add_parameter(
+                Parameter(
+                    name="camerafixed",
+                    input_types=["bool"],
+                    type="bool",
+                    default_value=False,
+                    tooltip="Camera fixed",
+                    allowed_modes={ParameterMode.INPUT, ParameterMode.PROPERTY},
+                )
+            )
+
             # Optional first frame (image) - accepts artifact or URL/base64 string
             self.add_parameter(
                 Parameter(
@@ -179,6 +203,8 @@ class SeedanceVideoGeneration(DataNode):
         resolution: str = self.get_parameter_value("resolution") or "1080p"
         ratio: str = self.get_parameter_value("ratio") or "16:9"
         first_frame_input = self.get_parameter_value("first_frame")
+        duration_val = self.get_parameter_value("duration")
+        camerafixed_val = self.get_parameter_value("camerafixed")
         poll_interval_s: float = 5.0
         timeout_s: float = 600.0
 
@@ -200,12 +226,31 @@ class SeedanceVideoGeneration(DataNode):
             text_parts.append(f"--resolution {resolution}")
         if ratio:
             text_parts.append(f"--ratio {ratio}")
+        if duration_val is not None and str(duration_val).strip():
+            text_parts.append(f"--duration {str(int(duration_val)).strip()}")
+        if camerafixed_val is not None:
+            cam_str = "true" if bool(camerafixed_val) else "false"
+            text_parts.append(f"--camerafixed {cam_str}")
         text_payload = "  ".join([p for p in text_parts if p])
 
         content_list: list[Dict[str, Any]] = [{"type": "text", "text": text_payload}]
 
         # Coerce first frame to URL or data URI if provided
         first_frame_url = self._coerce_image_url_or_data_uri(first_frame_input)
+        # If it's an external URL, inline to data URI so forwarder doesn't need to fetch
+        if isinstance(first_frame_url, str) and first_frame_url.startswith(("http://", "https://")):
+            try:
+                import base64
+                rff = requests.get(first_frame_url, timeout=20)
+                rff.raise_for_status()
+                ct = (rff.headers.get("content-type") or "image/jpeg").split(";")[0]
+                if not ct.startswith("image/"):
+                    ct = "image/jpeg"
+                b64 = base64.b64encode(rff.content).decode("utf-8")
+                first_frame_url = f"data:{ct};base64,{b64}"
+                self._log("First frame URL converted to data URI for forwarder")
+            except Exception as _e:
+                self._log(f"Warning: failed to inline first frame URL: {_e}")
         if first_frame_url:
             content_list.append({
                 "type": "image_url",
@@ -219,15 +264,42 @@ class SeedanceVideoGeneration(DataNode):
             }
         }
 
+        # Log sanitized request
+        def _sanitize_body(b: Dict[str, Any]) -> Dict[str, Any]:
+            try:
+                from copy import deepcopy
+                red = deepcopy(b)
+                cont = red.get("provider_request", {}).get("content", [])
+                for it in cont:
+                    if isinstance(it, dict) and it.get("type") == "image_url":
+                        iu = it.get("image_url") or {}
+                        url = iu.get("url")
+                        if isinstance(url, str) and url.startswith("data:image/"):
+                            parts = url.split(",", 1)
+                            header = parts[0] if parts else "data:image/"
+                            b64 = parts[1] if len(parts) > 1 else ""
+                            iu["url"] = f"{header},<redacted base64 length={len(b64)}>"
+                return red
+            except Exception:
+                return b
+
+        self._log(f"Submitting request to forwarder model={model_id}")
+        dbg_headers = {**headers, "Authorization": "Bearer ***"}
         try:
-            self._log(f"Submitting request to forwarder model={model_id}")
-            post_resp = requests.post(post_url, json=payload, headers=headers, timeout=60)
-            post_resp.raise_for_status()
-            post_json: Dict[str, Any] = post_resp.json()
-        except Exception as exc:  # pragma: no cover
+            import json as _json
+            self._log(f"POST {post_url}\nheaders={dbg_headers}\nbody={_json.dumps(_sanitize_body(payload), indent=2)}")
+        except Exception:
+            pass
+
+        post_resp = requests.post(post_url, json=payload, headers=headers, timeout=60)
+        if post_resp.status_code >= 400:
             self._set_safe_defaults()
-            self._log(f"POST to forwarder failed: {exc}")
-            raise RuntimeError(f"POST to forwarder failed: {exc}") from exc
+            try:
+                self._log(f"Forwarder POST error status={post_resp.status_code} headers={dict(post_resp.headers)} body={post_resp.text}")
+            except Exception:
+                self._log("Forwarder POST error (non-text body)")
+            raise RuntimeError(f"POST to forwarder failed: {post_resp.status_code}")
+        post_json: Dict[str, Any] = post_resp.json()
 
         generation_id = str(post_json.get("generation_id") or "")
         provider_response = post_json.get("provider_response")
