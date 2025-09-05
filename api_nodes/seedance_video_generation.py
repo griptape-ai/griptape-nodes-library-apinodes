@@ -59,7 +59,6 @@ class SeedanceVideoGeneration(DataNode):
                     ui_options={
                         "multiline": True,
                         "placeholder_text": "Describe the video...",
-                        "is_full_width": True,
                         "display_name": "Prompt",
                     },
                 )
