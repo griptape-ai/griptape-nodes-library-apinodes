@@ -1,5 +1,5 @@
-import os
 import json
+import os
 import time
 from urllib.parse import urljoin
 
@@ -9,7 +9,7 @@ import requests
 def load_env_local() -> None:
     env_path = os.path.join(os.path.dirname(__file__), ".env.local")
     if os.path.exists(env_path):
-        with open(env_path, "r") as f:
+        with open(env_path) as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
@@ -102,19 +102,14 @@ def main():
         try:
             with open(jpeg_path, "rb") as f:
                 import base64
+
                 b64 = base64.b64encode(f.read()).decode("utf-8")
                 first_frame = f"data:image/jpeg;base64,{b64}"
             print("Using local first_frame data URI (length)", len(first_frame))
         except Exception as e:
             print("warning: could not load first_frame.jpeg:", e)
 
-    text = (
-        f"{prompt} "
-        f"--resolution {resolution} "
-        f"--ratio {ratio} "
-        f"--duration {duration} "
-        f"--camerafixed {camerafixed}"
-    )
+    text = f"{prompt} --resolution {resolution} --ratio {ratio} --duration {duration} --camerafixed {camerafixed}"
 
     content = [{"type": "text", "text": text}]
     if first_frame:
@@ -142,6 +137,7 @@ def main():
         # RETRY 1: If using remote URL and we have bytes, retry with data URI
         if use_remote and remote_bytes:
             import base64
+
             mime = (remote_ct or "image/jpeg").split(";")[0]
             if not mime.startswith("image/"):
                 mime = "image/jpeg"
@@ -209,11 +205,7 @@ def main():
         if prov.get("error"):
             print("provider error object:", json.dumps(prov.get("error"), indent=2))
         if status in {"succeeded", "success", "completed", "failed", "error"}:
-            url = (
-                (prov.get("content") or {}).get("video_url")
-                or prov.get("video_url")
-                or j.get("video_url")
-            )
+            url = (prov.get("content") or {}).get("video_url") or prov.get("video_url") or j.get("video_url")
             if url:
                 print("video_url:", url)
             return

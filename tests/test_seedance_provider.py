@@ -1,10 +1,9 @@
-import os
 import json
+import os
 import time
 from urllib.parse import urljoin
 
 import requests
-
 
 PROVIDER_BASE = os.getenv("ARK_BASE_URL", "https://ark.ap-southeast.bytepluses.com/")
 API = urljoin(PROVIDER_BASE if PROVIDER_BASE.endswith("/") else PROVIDER_BASE + "/", "api/v3/")
@@ -14,7 +13,7 @@ TASKS_URL = urljoin(API, "contents/generations/tasks")
 def load_env_local() -> None:
     env_path = os.path.join(os.path.dirname(__file__), ".env.local")
     if os.path.exists(env_path):
-        with open(env_path, "r") as f:
+        with open(env_path) as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
@@ -54,6 +53,7 @@ def _load_first_frame_data_uri() -> str:
     jpeg_path = os.path.join(os.path.dirname(__file__), "first_frame.jpeg")
     with open(jpeg_path, "rb") as f:
         import base64
+
         b64 = base64.b64encode(f.read()).decode("utf-8")
         return f"data:image/jpeg;base64,{b64}"
 
@@ -72,13 +72,7 @@ def main():
     duration = os.getenv("TEST_DURATION", "5")
     camerafixed = os.getenv("TEST_CAMERA_FIXED", "false")
 
-    text = (
-        f"{prompt} "
-        f"--resolution {resolution} "
-        f"--ratio {ratio} "
-        f"--duration {duration} "
-        f"--camerafixed {camerafixed}"
-    )
+    text = f"{prompt} --resolution {resolution} --ratio {ratio} --duration {duration} --camerafixed {camerafixed}"
 
     first_frame = _load_first_frame_data_uri()
 
@@ -124,18 +118,10 @@ def main():
         r.raise_for_status()
         j = r.json()
         print(json.dumps(j, indent=2)[:2000])
-        status = (
-            j.get("status")
-            or j.get("data", {}).get("status")
-            or j.get("task_status")
-            or ""
-        ).lower()
+        status = (j.get("status") or j.get("data", {}).get("status") or j.get("task_status") or "").lower()
         if status in {"succeeded", "success", "completed", "failed", "error"}:
             cont = j.get("content") or j.get("data", {}).get("task_result") or {}
-            url = (
-                (cont.get("video_url") if isinstance(cont, dict) else None)
-                or j.get("video_url")
-            )
+            url = (cont.get("video_url") if isinstance(cont, dict) else None) or j.get("video_url")
             if url:
                 print("video_url:", url)
             return

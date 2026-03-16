@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import os
 import logging
+import os
 import time
-from time import sleep, monotonic
-from typing import Any, Dict, Optional
+from time import monotonic, sleep
+from typing import Any
 from urllib.parse import urljoin
 
 from griptape_nodes.exe_types.core_types import Parameter, ParameterMode
-from griptape_nodes.exe_types.node_types import DataNode, AsyncResult
-from griptape_nodes_library.video.video_url_artifact import VideoUrlArtifact
+from griptape_nodes.exe_types.node_types import AsyncResult, DataNode
 from griptape_nodes.traits.options import Options
+from griptape_nodes_library.video.video_url_artifact import VideoUrlArtifact
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
 
 
 class SeedanceVideoGeneration(DataNode):
@@ -100,7 +100,7 @@ class SeedanceVideoGeneration(DataNode):
                     default_value="16:9",
                     tooltip="Output aspect ratio",
                     allowed_modes={ParameterMode.INPUT, ParameterMode.PROPERTY},
-                    traits={Options(choices=["16:9", "4:3", "1:1", "3:4", "9:16", "21:9"])}
+                    traits={Options(choices=["16:9", "4:3", "1:1", "3:4", "9:16", "21:9"])},
                 )
             )
 
@@ -147,7 +147,7 @@ class SeedanceVideoGeneration(DataNode):
                     name="generation_id",
                     output_type="str",
                     tooltip="Griptape Cloud generation id",
-                    allowed_modes={ParameterMode.OUTPUT}
+                    allowed_modes={ParameterMode.OUTPUT},
                 )
             )
 
@@ -158,7 +158,7 @@ class SeedanceVideoGeneration(DataNode):
                     type="dict",
                     tooltip="Verbatim response from provider (initial POST)",
                     allowed_modes={ParameterMode.OUTPUT},
-                ui_options={"hide_property": True},
+                    ui_options={"hide_property": True},
                 )
             )
 
@@ -193,9 +193,7 @@ class SeedanceVideoGeneration(DataNode):
             import requests  # optional dependency, installed via library metadata
         except Exception as exc:  # pragma: no cover - surfaced to UI
             self._set_safe_defaults()
-            raise ImportError(
-                "Missing optional dependency 'requests'. Add it to library dependencies."
-            ) from exc
+            raise ImportError("Missing optional dependency 'requests'. Add it to library dependencies.") from exc
 
         prompt: str = self.get_parameter_value("prompt") or ""
         model_id: str = self.get_parameter_value("model_id") or "seedance-1-0-pro-250528"
@@ -207,7 +205,7 @@ class SeedanceVideoGeneration(DataNode):
         poll_interval_s: float = 5.0
         timeout_s: float = 600.0
 
-        api_key: Optional[str] = self.get_config_value(service=self.SERVICE_NAME, value=self.API_KEY_NAME)
+        api_key: str | None = self.get_config_value(service=self.SERVICE_NAME, value=self.API_KEY_NAME)
         if not api_key:
             self._set_safe_defaults()
             raise ValueError(f"Missing {self.API_KEY_NAME}. Ensure it's set in the environment/config.")
@@ -232,7 +230,7 @@ class SeedanceVideoGeneration(DataNode):
             text_parts.append(f"--camerafixed {cam_str}")
         text_payload = "  ".join([p for p in text_parts if p])
 
-        content_list: list[Dict[str, Any]] = [{"type": "text", "text": text_payload}]
+        content_list: list[dict[str, Any]] = [{"type": "text", "text": text_payload}]
 
         # Coerce first frame to URL or data URI if provided
         first_frame_url = self._coerce_image_url_or_data_uri(first_frame_input)
@@ -240,6 +238,7 @@ class SeedanceVideoGeneration(DataNode):
         if isinstance(first_frame_url, str) and first_frame_url.startswith(("http://", "https://")):
             try:
                 import base64
+
                 rff = requests.get(first_frame_url, timeout=20)
                 rff.raise_for_status()
                 ct = (rff.headers.get("content-type") or "image/jpeg").split(";")[0]
@@ -251,12 +250,14 @@ class SeedanceVideoGeneration(DataNode):
             except Exception as _e:
                 self._log(f"Warning: failed to inline first frame URL: {_e}")
         if first_frame_url:
-            content_list.append({
-                "type": "image_url",
-                "image_url": {"url": first_frame_url},
-            })
+            content_list.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": first_frame_url},
+                }
+            )
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "provider_request": {
                 "model": model_id,
                 "content": content_list,
@@ -264,9 +265,10 @@ class SeedanceVideoGeneration(DataNode):
         }
 
         # Log sanitized request
-        def _sanitize_body(b: Dict[str, Any]) -> Dict[str, Any]:
+        def _sanitize_body(b: dict[str, Any]) -> dict[str, Any]:
             try:
                 from copy import deepcopy
+
                 red = deepcopy(b)
                 cont = red.get("provider_request", {}).get("content", [])
                 for it in cont:
@@ -286,6 +288,7 @@ class SeedanceVideoGeneration(DataNode):
         dbg_headers = {**headers, "Authorization": "Bearer ***"}
         try:
             import json as _json
+
             self._log(f"POST {post_url}\nheaders={dbg_headers}\nbody={_json.dumps(_sanitize_body(payload), indent=2)}")
         except Exception:
             pass
@@ -294,11 +297,13 @@ class SeedanceVideoGeneration(DataNode):
         if post_resp.status_code >= 400:
             self._set_safe_defaults()
             try:
-                self._log(f"Forwarder POST error status={post_resp.status_code} headers={dict(post_resp.headers)} body={post_resp.text}")
+                self._log(
+                    f"Forwarder POST error status={post_resp.status_code} headers={dict(post_resp.headers)} body={post_resp.text}"
+                )
             except Exception:
                 self._log("Forwarder POST error (non-text body)")
             raise RuntimeError(f"POST to forwarder failed: {post_resp.status_code}")
-        post_json: Dict[str, Any] = post_resp.json()
+        post_json: dict[str, Any] = post_resp.json()
 
         generation_id = str(post_json.get("generation_id") or "")
         provider_response = post_json.get("provider_response")
@@ -314,7 +319,6 @@ class SeedanceVideoGeneration(DataNode):
             # UI status param removed; console logging only
         else:
             self._log("No generation_id returned from POST response")
-            
 
         if not generation_id:
             self.parameter_output_values["result"] = None
@@ -324,12 +328,11 @@ class SeedanceVideoGeneration(DataNode):
         # Poll for final result
         get_url = urljoin(self._forwarders_base, f"generations/{generation_id}")
         start_time = monotonic()
-        last_json: Optional[Dict[str, Any]] = None
+        last_json: dict[str, Any] | None = None
 
         attempt = 0
         while True:
             if monotonic() - start_time > timeout_s:
-                
                 self.parameter_output_values["video_url"] = self._extract_video_url(last_json)
                 self._log("Polling timed out waiting for result")
                 return
@@ -341,12 +344,13 @@ class SeedanceVideoGeneration(DataNode):
             except Exception as exc:  # pragma: no cover
                 # Leave the last good state and surface error
                 self._log(f"GET generation failed: {exc}")
-                
+
                 raise RuntimeError(f"GET generation failed: {exc}") from exc
 
             # Log full payload for diagnostics each attempt
             try:
                 import json as _json
+
                 self._log(f"GET payload attempt #{attempt + 1}: {_json.dumps(last_json, indent=2)}")
             except Exception:
                 pass
@@ -372,6 +376,7 @@ class SeedanceVideoGeneration(DataNode):
                         # Try to save to static files
                         try:
                             from griptape_nodes import GriptapeNodes
+
                             filename = f"seedance_video_{int(time.time())}.mp4"
                             static_files_manager = GriptapeNodes.StaticFilesManager()
                             saved_url = static_files_manager.save_static_file(video_bytes, filename)
@@ -396,7 +401,7 @@ class SeedanceVideoGeneration(DataNode):
         self.parameter_output_values["video_url"] = None
 
     @staticmethod
-    def _extract_status(obj: Optional[Dict[str, Any]]) -> Optional[str]:
+    def _extract_status(obj: dict[str, Any] | None) -> str | None:
         if not obj:
             return None
         for key in ("status", "state", "phase"):
@@ -420,7 +425,7 @@ class SeedanceVideoGeneration(DataNode):
         return None
 
     @staticmethod
-    def _is_complete(obj: Optional[Dict[str, Any]]) -> bool:
+    def _is_complete(obj: dict[str, Any] | None) -> bool:
         if not isinstance(obj, dict):
             return False
         # Direct completion indicators
@@ -447,7 +452,7 @@ class SeedanceVideoGeneration(DataNode):
         return False
 
     @staticmethod
-    def _extract_video_url(obj: Optional[Dict[str, Any]]) -> Optional[str]:
+    def _extract_video_url(obj: dict[str, Any] | None) -> str | None:
         if not obj:
             return None
         # Heuristic search for a URL in common places
@@ -471,7 +476,7 @@ class SeedanceVideoGeneration(DataNode):
         return None
 
     @staticmethod
-    def _coerce_image_url_or_data_uri(val: Any) -> Optional[str]:
+    def _coerce_image_url_or_data_uri(val: Any) -> str | None:
         if val is None:
             return None
         # String handling
@@ -488,7 +493,9 @@ class SeedanceVideoGeneration(DataNode):
         try:
             # ImageUrlArtifact: .value holds URL string
             v = getattr(val, "value", None)
-            if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://") or v.startswith("data:image/")):
+            if isinstance(v, str) and (
+                v.startswith("http://") or v.startswith("https://") or v.startswith("data:image/")
+            ):
                 return v
             # ImageArtifact: .base64 holds raw or data-URI
             b64 = getattr(val, "base64", None)
@@ -501,13 +508,11 @@ class SeedanceVideoGeneration(DataNode):
         return None
 
     @staticmethod
-    def _download_bytes_from_url(url: str) -> Optional[bytes]:
+    def _download_bytes_from_url(url: str) -> bytes | None:
         try:
             import requests
         except Exception as exc:  # pragma: no cover
-            raise ImportError(
-                "Missing optional dependency 'requests'. Add it to library dependencies."
-            ) from exc
+            raise ImportError("Missing optional dependency 'requests'. Add it to library dependencies.") from exc
 
         try:
             resp = requests.get(url, timeout=120)
@@ -515,5 +520,3 @@ class SeedanceVideoGeneration(DataNode):
             return resp.content
         except Exception:  # pragma: no cover
             return None
-
-
