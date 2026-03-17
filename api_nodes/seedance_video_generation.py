@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import os
 import logging
-import time
 from time import sleep, monotonic
 from typing import Any, Dict, Optional
 from urllib.parse import urljoin
 
 from griptape_nodes.exe_types.core_types import Parameter, ParameterMode
 from griptape_nodes.exe_types.node_types import DataNode, AsyncResult
+from griptape_nodes.exe_types.param_components.project_file_parameter import ProjectFileParameter
 from griptape_nodes_library.video.video_url_artifact import VideoUrlArtifact
 from griptape_nodes.traits.options import Options
 logging.basicConfig(level=logging.INFO)
@@ -172,6 +172,13 @@ class SeedanceVideoGeneration(DataNode):
                     ui_options={"is_full_width": True},
                 )
             )
+
+            self._output_file = ProjectFileParameter(
+                node=self,
+                name="output_file",
+                default_filename="seedance_video.mp4",
+            )
+            self._output_file.add_parameter()
         except Exception as exc:
             logger.exception("SeedanceVideoGeneration __init__ setup failed: %s", exc)
             raise
@@ -369,19 +376,11 @@ class SeedanceVideoGeneration(DataNode):
                         video_bytes = None
 
                     if video_bytes:
-                        # Try to save to static files
-                        try:
-                            from griptape_nodes import GriptapeNodes
-                            filename = f"seedance_video_{int(time.time())}.mp4"
-                            static_files_manager = GriptapeNodes.StaticFilesManager()
-                            saved_url = static_files_manager.save_static_file(video_bytes, filename)
-                            self.parameter_output_values["video_url"] = VideoUrlArtifact(value=saved_url, name=filename)
-                            self._log(f"Saved video to static storage as {filename}")
-                        except Exception:
-                            # Fallback to provider URL artifact if saving fails
-                            self.parameter_output_values["video_url"] = VideoUrlArtifact(value=extracted_url)
+                        dest = self._output_file.build_file()
+                        saved = dest.write_bytes(video_bytes)
+                        self.parameter_output_values["video_url"] = VideoUrlArtifact(value=saved.location)
+                        self._log(f"Saved video to static storage as {saved.location}")
                     else:
-                        # No bytes downloaded; fallback to provider URL artifact
                         self.parameter_output_values["video_url"] = VideoUrlArtifact(value=extracted_url)
                 # End terminal
                 return
