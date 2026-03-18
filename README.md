@@ -1,3 +1,7 @@
+> [!WARNING]
+> This library has been archived. This functionality is now built into [griptape-nodes-library-standard](https://github.com/griptape-ai/griptape-nodes-library-standard) as proxy nodes.
+
+
 # Griptape Nodes: Node Library Template
 
 Hi! Welcome to Griptape Nodes. 
